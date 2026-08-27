@@ -9,12 +9,12 @@ import {
     MarkdownRenderer,
     setIcon,
     requestUrl,
-    Platform
+    Platform,
+    moment
 } from 'obsidian';
 
 // External libraries
 import ICAL from 'ical.js';
-import moment from 'moment';
 
 // Constants
 import { VIEW_TYPE_PERIOD, DASHBOARDWIDGETS, PINNED_HIGHLIGHT_COLORS } from '../data/constants.js';
@@ -2077,7 +2077,7 @@ export class PeriodMonthView extends ItemView {
 
 
         const startDayNumber = this.plugin.settings.weekStartDay === 'monday' ? 1 : 0;
-        moment.updateLocale('en', { week: { dow: startDayNumber } });
+        moment.updateLocale(moment.locale(), { week: { dow: startDayNumber } });
 
 
         let dayOfWeek = firstDayOfMonth.getDay();
@@ -2561,7 +2561,7 @@ export class PeriodMonthView extends ItemView {
         const existingNotes = new Set(this.app.vault.getMarkdownFiles().filter(file => !folder || file.path.startsWith(folder + "/")).map(file => file.basename));
 
         const startDayNumber = this.plugin.settings.weekStartDay === 'monday' ? 1 : 0;
-        moment.updateLocale('en', { week: { dow: startDayNumber } });
+        moment.updateLocale(moment.locale(), { week: { dow: startDayNumber } });
 
         let dayOfWeek = firstDayOfMonth.getDay();
 
