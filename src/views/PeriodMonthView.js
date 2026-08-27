@@ -3102,7 +3102,7 @@ export class PeriodMonthView extends ItemView {
      * @returns {boolean} True if the file is a common image type.
      */
     isImageAsset(file) {
-        const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
+        const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp'];
         return imageExtensions.includes(file.extension.toLowerCase());
     }
 
@@ -5432,11 +5432,6 @@ export class PeriodMonthView extends ItemView {
             this.handleFileClick(noteFile, e, { line: targetLine });
             this.hideFilePopup();
         });
-    }
-
-    isImageAsset(file) {
-        const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'];
-        return imageExtensions.includes(file.extension.toLowerCase());
     }
 
     async showNotePopup(targetEl, noteFile) {
