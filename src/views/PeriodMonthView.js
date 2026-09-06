@@ -3901,16 +3901,17 @@ export class PeriodMonthView extends ItemView {
 
                 this.lastTaskLines.set(file.path, currentTaskData);
 
-                // Debounce the update slightly to avoid rapid-fire refreshes
+                // Listen before the debounce so a fast Tasks cache update is not missed.
+                const tasksReady = this.waitForTasksChangedOnce(1000);
                 window.clearTimeout(this.tasksFallbackTimer);
                 this.tasksFallbackTimer = window.setTimeout(async () => {
                     // This will now ALWAYS run when you edit a task line
-                    const tasksChanged = await this.updateTasksForFile(file);
+                    const tasksChanged = await this.updateTasksForFile(file, tasksReady);
 
                     if (tasksChanged) {
                         this.renderCalendar();
                         this.updateAlertHeader();
-                        this.refreshUI({ updateType: 'tasks', file });
+                        this.refreshUI({ updateType: 'tasks', file, tasksAlreadyLoaded: true });
 
                         // FORCE the popup to refresh if it is currently open
                         if (this.popupEl && this.popupEl.style.display !== 'none') {
@@ -4306,7 +4307,7 @@ export class PeriodMonthView extends ItemView {
         if (this.activeTab === 'dashboard') {
 
             // A. Always reload tasks on md change
-            if (file && file.extension === 'md') {
+            if (file && file.extension === 'md' && !options.tasksAlreadyLoaded) {
                 await this.buildAllTasksList();
             }
 
@@ -4366,7 +4367,8 @@ export class PeriodMonthView extends ItemView {
                 this.debouncedPopulateNotes();
                 break;
             case 'tasks':
-                this.debouncedPopulateTasks();
+                if (options.tasksAlreadyLoaded) this.reconcileCurrentTaskGroups();
+                else this.debouncedPopulateTasks();
                 break;
             case 'assets':
                 this.isUnusedAssetCacheValid = false;
@@ -5024,14 +5026,14 @@ export class PeriodMonthView extends ItemView {
     }
 
 
-    async updateTasksForFile(file) {
+    async updateTasksForFile(file, tasksReady = null) {
         if (!file || !(file instanceof TFile) || !file.path.toLowerCase().endsWith('.md')) {
             return false;
         }
 
         // FIX: Wait for Obsidian Tasks to finish processing the file change
         // This ensures getTasks() returns the NEW description
-        await this.waitForTasksChangedOnce(1000); // 1s timeout fallback
+        await (tasksReady || this.waitForTasksChangedOnce(1000));
 
         await this.buildAllTasksList();
 
@@ -13843,13 +13845,15 @@ export class PeriodMonthView extends ItemView {
     async waitForTasksChangedOnce(timeoutMs = 500) {
         return new Promise((resolve) => {
             let settled = false;
-            const finish = () => { if (settled) return; settled = true; resolve(); };
-
-            const ref = this.app.workspace.on('tasks-changed', () => finish());
-            this.registerEvent(ref);
-
-            // Fallback if plugin doesn’t emit in time
-            window.setTimeout(finish, timeoutMs);
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timer);
+                this.app.workspace.offref(ref);
+                resolve();
+            };
+            const ref = this.app.workspace.on('tasks-changed', finish);
+            const timer = window.setTimeout(finish, timeoutMs);
         });
     }
 
@@ -13891,10 +13895,11 @@ export class PeriodMonthView extends ItemView {
             const currentLine = lines[task.lineNumber];
             if (currentLine === undefined) throw new Error('Task line not found.');
 
-            const updatedLine = tasksApi.executeToggleTaskDoneCommand(currentLine, task.path);
+            const updatedLine = await tasksApi.executeToggleTaskDoneCommand(currentLine, task.path);
             lines.splice(task.lineNumber, 1, updatedLine);
             await this.app.vault.modify(file, lines.join('\n'));
 
+            const updatedSymbol = updatedLine.match(/^\s*(?:[-*+]|\d+[.)])\s+\[([^\]])\]/)?.[1] ?? ' ';
             if (this.containerEl) {
                 const rowSelector =
                     `.cpwn-tasks-tab-row[data-task-path="${task.path}"][data-line-number="${task.lineNumber}"]`;
@@ -13904,17 +13909,18 @@ export class PeriodMonthView extends ItemView {
                 if (tasksTabRow) {
                     const checkbox = tasksTabRow.querySelector('input.task-list-item-checkbox');
                     if (checkbox) {
-                        const willBeDone = !checkbox.checked;
+                        const willBeDone = updatedSymbol !== ' ';
                         checkbox.checked = willBeDone;
+                        checkbox.dataset.task = updatedSymbol;
 
                         if (willBeDone) {
                             checkbox.classList.add('is-checked');
                             tasksTabRow.classList.add('is-checked');
-                            tasksTabRow.setAttribute('data-task', 'x');
+                            tasksTabRow.setAttribute('data-task', updatedSymbol);
                         } else {
                             checkbox.classList.remove('is-checked');
                             tasksTabRow.classList.remove('is-checked');
-                            const symbol = task.status && task.status.symbol ? task.status.symbol : ' ';
+                            const symbol = updatedSymbol;
                             checkbox.dataset.task = symbol;
                             tasksTabRow.setAttribute('data-task', symbol);
                         }
@@ -13934,14 +13940,15 @@ export class PeriodMonthView extends ItemView {
                     const checkbox = popupTaskRow.querySelector('input[type="checkbox"]');
                     if (checkbox) {
                         // Toggle the visual state
-                        const willBeDone = !checkbox.checked;
+                        const willBeDone = updatedSymbol !== ' ';
                         checkbox.checked = willBeDone;
+                        checkbox.dataset.task = updatedSymbol;
 
                         // Sync Classes (important for theme styles discussed earlier)
                         if (willBeDone) {
                             checkbox.addClass('is-checked');
                             popupTaskRow.addClass('is-checked');
-                            popupTaskRow.setAttribute('data-task', 'x');
+                            popupTaskRow.setAttribute('data-task', updatedSymbol);
                         } else {
                             checkbox.removeClass('is-checked');
                             popupTaskRow.removeClass('is-checked');
@@ -13950,10 +13957,6 @@ export class PeriodMonthView extends ItemView {
                     }
                 }
             }
-
-            await this.waitForTasksChangedOnce(500);
-
-
         } catch (err) {
             console.error('Error toggling task', err);
             new Notice('Failed to toggle task.');
