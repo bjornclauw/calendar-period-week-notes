@@ -10,19 +10,37 @@ export class TaskProviderService {
     }
 
     getConfiguredSources() {
-        const source = this.plugin.settings.taskSource || 'obsidian';
+        const sources = Array.isArray(this.plugin.settings.taskSources)
+            ? this.plugin.settings.taskSources
+            : this.legacyTaskSources();
         return {
-            useObsidian: source === 'obsidian' || source === 'both',
-            useTodoist: source === 'todoist' || source === 'both'
+            useObsidian: sources.includes('obsidian'),
+            useTodoSeq: sources.includes('todoseq'),
+            useTodoist: sources.includes('todoist')
         };
     }
 
+    /**
+     * Map the pre-1.9.6 single-choice `taskSource` setting to the source list.
+     */
+    legacyTaskSources() {
+        const source = this.plugin.settings.taskSource || 'obsidian';
+        if (source === 'both') return ['obsidian', 'todoist'];
+        if (source === 'todoist') return ['todoist'];
+        if (source === 'todoseq') return ['todoseq'];
+        return ['obsidian'];
+    }
+
     async getTasks() {
-        const { useObsidian, useTodoist } = this.getConfiguredSources();
+        const { useObsidian, useTodoSeq, useTodoist } = this.getConfiguredSources();
         const tasks = [];
 
         if (useObsidian) {
             tasks.push(...this.getObsidianTasks());
+        }
+
+        if (useTodoSeq) {
+            tasks.push(...this.getTodoSeqTasks());
         }
 
         if (useTodoist) {
@@ -97,6 +115,105 @@ export class TaskProviderService {
             ...base,
             moment: dateMoment.clone()
         };
+    }
+
+    getTodoSeqPlugin() {
+        return this.app.plugins.plugins['todoseq'];
+    }
+
+    getTodoSeqApi() {
+        return this.getTodoSeqPlugin()?.api || null;
+    }
+
+    getTodoSeqTasks() {
+        const api = this.getTodoSeqApi();
+        if (!api || typeof api.getTasks !== 'function') {
+            console.warn('[CPWN] TODOseq plugin not found or not ready.');
+            return [];
+        }
+
+        try {
+            return api.getTasks().map(task => this.normalizeTodoSeqTask(task));
+        } catch (error) {
+            console.error('[CPWN] Error reading TODOseq tasks.', error);
+            return [];
+        }
+    }
+
+    normalizeTodoSeqTask(task) {
+        const path = task.path || '';
+        const cellIndex = task.tableCell?.cellIndex;
+        const cpwnId = cellIndex === undefined
+            ? `todoseq:${path}:${task.line ?? ''}`
+            : `todoseq:${path}:${task.line ?? ''}:${cellIndex}`;
+
+        // TODOseq has DEADLINE (due) and SCHEDULED (start). Use the deadline as
+        // the due date, falling back to the scheduled date when no deadline is
+        // set so scheduled-only tasks still appear in date groups/calendar.
+        const dueMoment = this.getDateMoment(task.deadlineDate, task.scheduledDate);
+        const createdMoment = this.getDateMoment(task.createdDate);
+        const doneMoment = this.getDateMoment(task.closedDate);
+        const status = this.getTodoSeqStatus(task);
+
+        return {
+            ...task,
+            source: 'todoseq',
+            cpwnId,
+            id: cpwnId,
+            path,
+            file: path ? { path } : null,
+            lineNumber: task.line ?? null,
+            description: task.text || '',
+            tags: (task.tags || []).map(tag => tag.startsWith('#') ? tag : `#${tag}`),
+            status,
+            isDone: status.type === 'DONE',
+            due: dueMoment ? { moment: dueMoment } : null,
+            dueDate: dueMoment ? dueMoment.format('YYYY-MM-DD') : null,
+            done: doneMoment ? { moment: doneMoment } : null,
+            doneDate: doneMoment ? doneMoment.format('YYYY-MM-DD') : null,
+            created: createdMoment ? { moment: createdMoment } : null,
+            createdDate: createdMoment ? createdMoment.format('YYYY-MM-DD') : null,
+            priority: this.mapTodoSeqPriority(task.priority),
+            recurrenceRule: this.getTodoSeqRecurrence(task)
+        };
+    }
+
+    /**
+     * Map a TODOseq task to the common status shape. TODOseq is keyword based,
+     * so completed/archived/active are resolved through its KeywordManager and
+     * the checkbox symbol mirrors the keyword's checkbox character.
+     */
+    getTodoSeqStatus(task) {
+        const plugin = this.getTodoSeqPlugin();
+        const keywordManager = plugin?.keywordManager;
+
+        let symbol = task.completed ? 'x' : ' ';
+        if (keywordManager?.getCheckboxState) {
+            const keywordSymbol = keywordManager.getCheckboxState(task.state, plugin.settings);
+            if (keywordSymbol) symbol = keywordSymbol;
+        }
+
+        if (task.completed) return { type: 'DONE', symbol };
+        if (keywordManager?.isArchived?.(task.state)) return { type: 'CANCELLED', symbol };
+        if (keywordManager?.isActive?.(task.state)) return { type: 'IN_PROGRESS', symbol };
+        return { type: 'TODO', symbol };
+    }
+
+    /**
+     * Map TODOseq high/medium/low priorities to the numeric scale used by the
+     * task layouts (0 highest, 2 none, 4 low).
+     */
+    mapTodoSeqPriority(priority) {
+        if (priority === 'high') return 0;
+        if (priority === 'med') return 1;
+        if (priority === 'low') return 4;
+        return 2;
+    }
+
+    getTodoSeqRecurrence(task) {
+        const repeat = task.scheduledDateRepeat || task.deadlineDateRepeat;
+        if (!repeat) return null;
+        return repeat.raw || null;
     }
 
     getTodoistPlugin() {
@@ -307,6 +424,15 @@ export class TaskProviderService {
             }
             this.markTodoistTaskClosed(task.todoistId || task.id);
             await todoistService.actions.closeTask(task.todoistId || task.id);
+            return;
+        }
+
+        if (task.source === 'todoseq') {
+            const api = this.getTodoSeqApi();
+            if (!api || typeof api.toggleTask !== 'function') {
+                throw new Error('TODOseq API not found.');
+            }
+            await api.toggleTask(task.path, task.lineNumber, task.tableCell?.cellIndex);
             return;
         }
 

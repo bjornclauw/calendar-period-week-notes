@@ -3364,8 +3364,8 @@ export class PeriodMonthView extends ItemView {
     }
 
     taskSourceIncludesTodoist() {
-        const source = this.plugin.settings.taskSource || 'obsidian';
-        return source === 'todoist' || source === 'both';
+        const sources = this.taskProvider?.getConfiguredSources?.();
+        return !!sources?.useTodoist;
     }
 
     canCreateTodoistTasks() {
@@ -5030,8 +5030,11 @@ export class PeriodMonthView extends ItemView {
         }
 
         // FIX: Wait for Obsidian Tasks to finish processing the file change
-        // This ensures getTasks() returns the NEW description
-        await this.waitForTasksChangedOnce(1000); // 1s timeout fallback
+        // This ensures getTasks() returns the NEW description. Only needed when
+        // Obsidian Tasks is one of the configured sources.
+        if (this.taskProvider?.getConfiguredSources?.().useObsidian) {
+            await this.waitForTasksChangedOnce(1000); // 1s timeout fallback
+        }
 
         await this.buildAllTasksList();
 
@@ -12812,6 +12815,7 @@ export class PeriodMonthView extends ItemView {
 
             itemEl.dataset.taskStatus = task.status.type;
             itemEl.dataset.taskSource = task.source || 'obsidian-tasks';
+            itemEl.dataset.key = view.getTaskKey(task);
             itemEl.dataset.taskPath = task.path || '';
             itemEl.dataset.lineNumber = task.lineNumber == null ? '' : String(task.lineNumber);
             itemEl.dataset.todoistId = task.todoistId || '';
@@ -13878,6 +13882,21 @@ export class PeriodMonthView extends ItemView {
             return;
         }
 
+        if (task.source === 'todoseq') {
+            this.isTogglingTask = true;
+            try {
+                await this.taskProvider.toggleTask(task);
+                await this.refreshTasksFromProviderWithoutClearing();
+                new Notice('TODOseq task updated.');
+            } catch (err) {
+                console.error('Error toggling TODOseq task', err);
+                new Notice('Failed to toggle TODOseq task.');
+            } finally {
+                this.isTogglingTask = false;
+            }
+            return;
+        }
+
         const tasksApi = this.app.plugins.plugins['obsidian-tasks-plugin']?.apiV1;
         if (!tasksApi) { new Notice('Tasks API not found.'); return; }
 
@@ -13998,9 +14017,10 @@ export class PeriodMonthView extends ItemView {
 
         const taskItems = this.popupEl.querySelectorAll('.cpwn-other-notes-popup-item');
         for (const itemEl of Array.from(taskItems)) {
-            const itemKey = itemEl.dataset.taskSource === 'todoist'
-                ? `todoist:${itemEl.dataset.todoistId}`
-                : `${itemEl.dataset.taskPath}#${itemEl.dataset.lineNumber}`;
+            const itemKey = itemEl.dataset.key
+                || (itemEl.dataset.taskSource === 'todoist'
+                    ? `todoist:${itemEl.dataset.todoistId}`
+                    : `${itemEl.dataset.taskPath}#${itemEl.dataset.lineNumber}`);
             const freshTask = this.allTasks.find(t => this.getTaskKey(t) === itemKey);
 
             if (freshTask) {

@@ -122,6 +122,7 @@ A powerful set of panels located below the calendar. All tabs can be reordered v
     -   **Group tasks** by due date (`Overdue`, `Today`...) or by `#tag`. Toggle the grouping method by **clicking the tab**.
     -   **Animated Groups**: Task groups smoothly expand and collapse.
     -   Check off tasks directly from the list to update the source file instantly.
+    -   **TODOseq support**: Optionally read tasks from the third-party [TODOseq](https://github.com/scross01/obsidian-todoseq) community plugin and combine it with Obsidian Tasks and/or Todoist Sync.
     -   **Todoist Sync support**: Optionally read active tasks from the third-party [Todoist Sync](https://github.com/jamiebrynes7/obsidian-todoist-plugin) community plugin, combine Todoist with Obsidian Tasks, complete Todoist tasks from the list, and add Todoist tasks from the Tasks tab using Todoist Sync's native add-task modal.
 -   **🖼️ Assets Tab**:
     -   **Toggle between list and grid view** by clicking the tab.
@@ -235,6 +236,25 @@ The folder structure should be:
 ├── manifest.json
 ├── styles.css
 ```
+
+### Optional TODOseq Integration
+
+Calendar Period Week Notes can integrate with [TODOseq](https://github.com/scross01/obsidian-todoseq) through its public API.
+
+TODOseq is not bundled with Calendar Period Week Notes. To use TODOseq tasks in this plugin, install and enable TODOseq separately.
+
+When TODOseq is available, Calendar Period Week Notes can:
+
+-   Use TODOseq as a task source, on its own or alongside Obsidian Tasks and/or Todoist Sync.
+-   Show TODOseq tasks in the Tasks tab and task dashboard widgets.
+-   Group TODOseq tasks into the configured date groups, using the task's `DEADLINE` date as the due date, falling back to its `SCHEDULED` date when no deadline is set.
+-   Complete or reopen TODOseq tasks from the task list.
+
+Limitations:
+
+-   TODOseq has no separate start date; `DEADLINE` maps to the due date and `SCHEDULED` is used as the due date when no deadline is present.
+-   Completed-history widgets require Obsidian Tasks data.
+-   TODOseq `DESCRIPTION` lines are not shown as secondary text.
 
 ### Optional Todoist Sync Integration
 
@@ -479,7 +499,9 @@ The plugin offers extensive options organized into the following tabs.
 
 | Setting | Description | Default Value |
 | :--- | :--- | :--- |
-| **Task source** | Choose `Obsidian Tasks`, `Todoist Sync`, or both as the source for task lists and dashboard metrics. | `Obsidian Tasks` |
+| **Use Obsidian Tasks** | Read tasks from the Obsidian Tasks community plugin. | `true` |
+| **Use TODOseq** | Read tasks from the TODOseq community plugin. | `false` |
+| **Use Todoist Sync** | Read active tasks from the Todoist Sync community plugin. | `false` |
 | **Todoist dashboard filter** | Optional Todoist filter used when Todoist Sync is selected. Leave blank to show all active Todoist tasks; add a Todoist filter only when you want to narrow the task list/dashboard. | Blank |
 | **Task heading font size** | Font size for group headings (e.g., 'Today', 'Overdue'). | `13px` |
 | **Task text font size** | Font size for individual task items. | `14px` |

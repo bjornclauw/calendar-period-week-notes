@@ -257,6 +257,8 @@ export const DEFAULT_SETTINGS = {
 
     // Tasks Tab Settings
     taskSource: "obsidian",
+    taskSources: ["obsidian"],
+    taskSourcesMigrated: false,
     todoistFilter: "",
     todoistFilterMigratedFromOldDefault: false,
     taskIgnoreFolders: [],

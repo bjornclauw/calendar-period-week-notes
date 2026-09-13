@@ -24,6 +24,16 @@ export default class PeriodMonthPlugin extends Plugin {
             this.settings.todoistFilterMigratedFromOldDefault = true;
             await this.saveData(this.settings);
         }
+        if (!this.settings.taskSourcesMigrated) {
+            // Migrate the legacy single-choice `taskSource` to the list of
+            // enabled providers used by the Tasks tab.
+            const legacy = this.settings.taskSource || 'obsidian';
+            this.settings.taskSources = legacy === 'both'
+                ? ['obsidian', 'todoist']
+                : [legacy];
+            this.settings.taskSourcesMigrated = true;
+            await this.saveData(this.settings);
+        }
         const CORE_GOALS = [
             {
                 id: 'core-daily-note',

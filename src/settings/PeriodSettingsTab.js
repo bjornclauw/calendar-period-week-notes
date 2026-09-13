@@ -2129,33 +2129,54 @@ export class PeriodSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl).setName("Task provider").setHeading();
 
-        const todoistHelp = containerEl.createDiv({ cls: 'cpwn-setting-help cpwn-todoist-help' });
-        todoistHelp.createEl('h3', { text: 'Using Todoist Sync' });
-        todoistHelp.createEl('p', {
-            text: 'Calendar Period Week Notes can read active Todoist tasks through the Todoist Sync community plugin. Install and configure Todoist Sync first, then choose Todoist Sync or Both as the task source below.'
+        const providersHelp = containerEl.createDiv({ cls: 'cpwn-setting-help cpwn-todoist-help' });
+        providersHelp.createEl('h3', { text: 'Choosing task providers' });
+        providersHelp.createEl('p', {
+            text: 'Enable one or more task providers below. Obsidian Tasks and TODOseq read tasks from your vault; Todoist Sync reads active tasks through the Todoist Sync community plugin. Enabling several providers combines their tasks.'
         });
-        const todoistSteps = todoistHelp.createEl('ol');
-        todoistSteps.createEl('li', { text: 'Install and enable the Todoist Sync plugin, then connect it to your Todoist account.' });
-        todoistSteps.createEl('li', { text: 'Choose Todoist Sync to use only Todoist tasks, or Both to combine Todoist with Obsidian Tasks.' });
-        todoistSteps.createEl('li', { text: 'Leave the Todoist filter blank to show all active tasks, or enter a Todoist filter to narrow the dashboard. Examples: today | overdue, no date, p1 | p2, or @work.' });
-        todoistSteps.createEl('li', { text: 'Use due dates, labels and priorities in Todoist to power calendar indicators, task groups and dashboard counts.' });
-        todoistHelp.createEl('p', {
+        providersHelp.createEl('p', {
+            text: 'TODOseq tasks use their DEADLINE date as the due date and their SCHEDULED date where applicable. Todoist Sync must be installed and configured separately; leave the Todoist filter blank to show all active tasks.'
+        });
+        providersHelp.createEl('p', {
             text: 'Todoist Sync provides active/query tasks and completion actions. Completed-history widgets still need Obsidian Tasks data unless you also keep Obsidian Tasks enabled.'
         });
 
+        const getTaskSources = () => Array.isArray(this.plugin.settings.taskSources)
+            ? this.plugin.settings.taskSources
+            : [];
+
+        const setTaskSource = async (source, enabled) => {
+            const next = new Set(getTaskSources());
+            if (enabled) {
+                next.add(source);
+            } else {
+                next.delete(source);
+            }
+            this.plugin.settings.taskSources = [...next];
+            await this.saveAndUpdate();
+            this.triggerDashboardRefresh();
+        };
+
         new Setting(containerEl)
-            .setName("Task source")
-            .setDesc("Choose where Calendar Period Week Notes reads tasks from. Todoist requires the Todoist Sync community plugin to be installed, enabled, and configured.")
-            .addDropdown(dropdown => dropdown
-                .addOption('obsidian', 'Obsidian Tasks')
-                .addOption('todoist', 'Todoist Sync')
-                .addOption('both', 'Obsidian Tasks and Todoist Sync')
-                .setValue(this.plugin.settings.taskSource || 'obsidian')
-                .onChange(async (value) => {
-                    this.plugin.settings.taskSource = value;
-                    await this.saveAndUpdate();
-                    this.triggerDashboardRefresh();
-                }));
+            .setName("Use Obsidian Tasks")
+            .setDesc("Read tasks from the Obsidian Tasks community plugin.")
+            .addToggle(toggle => toggle
+                .setValue(getTaskSources().includes('obsidian'))
+                .onChange(async (value) => { await setTaskSource('obsidian', value); }));
+
+        new Setting(containerEl)
+            .setName("Use TODOseq")
+            .setDesc("Read tasks from the TODOseq community plugin.")
+            .addToggle(toggle => toggle
+                .setValue(getTaskSources().includes('todoseq'))
+                .onChange(async (value) => { await setTaskSource('todoseq', value); }));
+
+        new Setting(containerEl)
+            .setName("Use Todoist Sync")
+            .setDesc("Read active tasks from the Todoist Sync community plugin. Requires Todoist Sync to be installed, enabled and configured.")
+            .addToggle(toggle => toggle
+                .setValue(getTaskSources().includes('todoist'))
+                .onChange(async (value) => { await setTaskSource('todoist', value); }));
 
         new Setting(containerEl)
             .setName("Todoist dashboard filter")
