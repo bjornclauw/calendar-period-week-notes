@@ -3527,6 +3527,11 @@ export class PeriodMonthView extends ItemView {
     }
 
     getScratchpadParts(fullContent) {
+        // Guard against null/undefined (e.g., loadNote() when no file is configured).
+        if (typeof fullContent !== 'string') {
+            fullContent = fullContent == null ? '' : String(fullContent);
+        }
+
         // If the setting to hide frontmatter is OFF, return the entire content as the body.
         if (!this.plugin.settings.scratchpad?.hideFrontmatter) {
             return { frontmatter: '', body: fullContent };
