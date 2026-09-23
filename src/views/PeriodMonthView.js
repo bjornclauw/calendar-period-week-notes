@@ -150,7 +150,12 @@ export class PeriodMonthView extends ItemView {
         this.layoutRenderer = new TaskLayoutRenderer(this.app, this, this.plugin);
 
         // Initialize a MutationObserver to watch for theme changes.
+        this.lastThemeMode = document.body.classList.contains('theme-dark') ? 'dark' : 'light';
         this.themeObserver = new MutationObserver(() => {
+            const themeMode = document.body.classList.contains('theme-dark') ? 'dark' : 'light';
+            if (themeMode === this.lastThemeMode) return;
+            this.lastThemeMode = themeMode;
+
             // Debounce the re-render to avoid multiple calls during theme switching.
             if (this.themeChangeDebounceTimer) {
                 window.clearTimeout(this.themeChangeDebounceTimer);
